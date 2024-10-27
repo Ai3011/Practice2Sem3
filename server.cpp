@@ -1,17 +1,17 @@
-#include <iostream>  
-#include <thread>  
-#include <mutex>  
-#include <memory>  
-#include <netinet/in.h> // Для работы с сокетами  
-#include <unistd.h> // Для close()  
-#include <cstring> // Для memset  
-#include <stdexcept>  
-#include "Commands.h" // Подключение вашей реализации команд  
-  
-using namespace std;  
-  
-std::mutex db_mutex; // Мьютекс для синхронизации доступа к БД  
-  
+#include <iostream> 
+#include <thread> 
+#include <mutex> 
+#include <memory> 
+#include <netinet/in.h> // Для работы с сокетами 
+#include <unistd.h> // Для close() 
+#include <cstring> // Для memset 
+#include <stdexcept> 
+#include "Commands.h" // Подключение вашей реализации команд 
+ 
+using namespace std; 
+ 
+std::mutex db_mutex; // Мьютекс для синхронизации доступа к БД 
+ 
 // Функция для обработки команд 
 void console_parse(string& schem_name, HashTable<List<string>>& tables, List<string>& tables_names, int& limit, const string& command, string& response) { 
     try { 
@@ -47,94 +47,105 @@ void console_parse(string& schem_name, HashTable<List<string>>& tables, List<str
         } else { 
             throw runtime_error("Unknown command"); 
         } 
+
+        this_thread::sleep_for(chrono::seconds(5));
+
     } catch (const runtime_error& err) { 
         response = "Error: " + string(err.what()); 
     } 
-}
+} 
  
-void handle_client(int client_socket, string& schem_name,     
-                   shared_ptr<HashTable<List<string>>> tables,     
-                   shared_ptr<List<string>> tables_names, int limit) {    
-    char buffer[1024] = {0};    
+// Функция для обработки запросов клиента 
+void handle_client(int client_socket, string& schem_name, 
+                   shared_ptr<HashTable<List<string>>> tables, 
+                   shared_ptr<List<string>> tables_names, int limit) { 
+    char buffer[1024] = {0}; 
     bool running = true;  // состояние для продолжения работы 
-   
+ 
     while (running) {  // Ожидаем следующую команду 
-        // Получаем данные от клиента    
-        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);    
-        if (bytes_received <= 0) {    
-            cerr << "Error receiving data or client disconnected" << endl;    
-            break;  // Завершаем цикл, если ошибка получения или клиент отключился   
-        }    
-        buffer[bytes_received] = '\0'; // Завершаем строку    
-        string command(buffer);    
-        string response;  
-   
-        try {   
-            std::lock_guard<std::mutex> lock(db_mutex); // Защищаем работу с БД   
-            console_parse(schem_name, *tables, *tables_names, limit, command, response); // Обрабатываем команду   
+        // Получаем данные от клиента 
+        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0); 
+        if (bytes_received <= 0) { 
+            cerr << "Error receiving data or client disconnected" << endl; 
+            break;  // Завершаем цикл, если ошибка получения или клиент отключился 
+        } 
+        buffer[bytes_received] = '\0'; // Завершаем строку 
+        string command(buffer); 
+        string response; 
+ 
+        // Проверка состояния мьютекса 
+        if (!db_mutex.try_lock()) { 
+            response = "Currently, another user is working with the database."; 
+            send(client_socket, response.c_str(), response.size(), 0); 
+            continue; // Пропускаем текущую итерацию, если мьютекс заблокирован 
+        } 
+ 
+        try { 
+            console_parse(schem_name, *tables, *tables_names, limit, command, response); // Обрабатываем команду 
              
             if (command == "EXIT") {  // Проверка на команду выхода 
                 response = "Exiting..."; 
                 send(client_socket, response.c_str(), response.size(), 0); 
-                running = false;  // Завершаем цикл, если команда EXIT   
+                running = false;  // Завершаем цикл, если команда EXIT 
             } else { 
                 send(client_socket, response.c_str(), response.size(), 0); // Отправляем результат клиенту 
             } 
-             
-        } catch (const std::exception& e) {   
-            response = "Error: " + string(e.what());   
-            send(client_socket, response.c_str(), response.size(), 0);   
-        }  
-    }  
-   
+        } catch (const std::exception& e) { 
+            response = "Error: " + string(e.what()); 
+            send(client_socket, response.c_str(), response.size(), 0); 
+        } 
+ 
+        db_mutex.unlock(); // Освобождаем мьютекс после обработки команды 
+    } 
+ 
     close(client_socket);  // Закрываем соединение после выхода из цикла 
-}
-  
-int main() {   
-    auto tables = make_shared<HashTable<List<string>>>();   
-    auto tables_names = make_shared<List<string>>();   
-    string schem_name;   
-    int limit;   
-  
-    // Загрузка данных из JSON-файла   
-    try {   
-        getJSON(*tables, *tables_names, schem_name, limit);   
-    } catch (const std::exception& e) {   
-        cerr << "Failed to load JSON data: " << e.what() << endl;   
+} 
+ 
+int main() { 
+    auto tables = make_shared<HashTable<List<string>>>(); 
+    auto tables_names = make_shared<List<string>>(); 
+    string schem_name; 
+    int limit; 
+ 
+    // Загрузка данных из JSON-файла 
+    try { 
+        getJSON(*tables, *tables_names, schem_name, limit); 
+    } catch (const std::exception& e) { 
+        cerr << "Failed to load JSON data: " << e.what() << endl; 
         return EXIT_FAILURE; 
-    }   
-  
-    // Настройка сервера  
-    int server_socket = socket(AF_INET, SOCK_STREAM, 0);   
-    if (server_socket < 0) throw runtime_error("Unable to create socket");   
-  
-    sockaddr_in server_addr{};   
-    server_addr.sin_family = AF_INET;   
-    server_addr.sin_addr.s_addr = INADDR_ANY;   
-    server_addr.sin_port = htons(7432);   
-  
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {   
-        close(server_socket);   
-        throw runtime_error("Bind failed");   
-    }   
-    if (listen(server_socket, 5) < 0) {   
-        close(server_socket);   
-        throw runtime_error("Listen failed");
-}   
-  
-    cout << "Server is listening on port 7432..." << endl;   
-  
-    while (true) {   
-        int client_socket = accept(server_socket, nullptr, nullptr);   
-        if (client_socket < 0) {   
-            cerr << "Accept failed" << endl;   
-            continue;  
-        }   
-          
-        thread t(handle_client, client_socket, ref(schem_name), tables, tables_names, limit);   
-        t.detach();  
-    }   
-  
-    close(server_socket);   
-    return 0;   
+    } 
+ 
+    // Настройка сервера 
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0); 
+    if (server_socket < 0) throw runtime_error("Unable to create socket"); 
+ 
+    sockaddr_in server_addr{}; 
+    server_addr.sin_family = AF_INET; 
+    server_addr.sin_addr.s_addr = INADDR_ANY; 
+    server_addr.sin_port = htons(7432); 
+ 
+    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) { 
+        close(server_socket); 
+        throw runtime_error("Bind failed"); 
+    } 
+    if (listen(server_socket, 5) < 0) { 
+        close(server_socket); 
+        throw runtime_error("Listen failed"); 
+    } 
+ 
+    cout << "Server is listening on port 7432..." << endl; 
+ 
+    while (true) { 
+        int client_socket = accept(server_socket, nullptr, nullptr); 
+        if (client_socket < 0) { 
+            cerr << "Accept failed" << endl; 
+            continue; 
+        } 
+ 
+        thread t(handle_client, client_socket, ref(schem_name), tables, tables_names, limit); 
+        t.detach();  // Запускаем поток и продолжаем принимать новых клиентов 
+    } 
+ 
+    close(server_socket); 
+    return 0; 
 } 
