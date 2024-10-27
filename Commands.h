@@ -28,7 +28,7 @@ void showMenu() {
 }
 
 // Реализация функции установки первичного ключа
-void setPrimaryKeyFile(const filesystem::path& directory, const std::string& tableName, int key) {
+void setPrimaryKeyFile(const filesystem::path& directory, const string& tableName, int key) {
     filesystem::path filePath = directory / (tableName + "_pk"); // Путь к файлу с ключом
     ofstream file(filePath, ios::out | ios::trunc); // Открытие файла для записи
     file << key; // Запись ключа
@@ -36,7 +36,7 @@ void setPrimaryKeyFile(const filesystem::path& directory, const std::string& tab
 }
 
 // Реализация функции чтения первичного ключа
-int readPrimaryKeyValue(const filesystem::path& directory, const std::string& tableName) {
+int readPrimaryKeyValue(const filesystem::path& directory, const string& tableName) {
     filesystem::path filePath = directory / (tableName + "_pk"); // Путь к файлу с ключом
     ifstream file(filePath); // Открытие файла для чтения
     int value;
@@ -407,79 +407,94 @@ void where_select(string& line, int& i, string& logOperator, List<string>& posl,
         logOperator = take_string(line, i); // Получаем следующий логический оператор
     }
 }
-// Функция для выполнения SQL-подобного запроса SELECT
-void select(string& line, int& i, string& schem_name, HashTable<List<string>>& tables) {
-    filesystem::path dirPath = "."; // Путь к директории
-    List<string> selected_tables; // Список выбранных таблиц
-    List<string> selected_columns; // Список выбранных колонок
-    
-    // Получаем имена таблиц и колонок из запроса
-    get_names(line, i, selected_tables, selected_columns);
-    
-    string com = take_string(line, i); // Получаем следующее слово
-    if (com != "FROM") { // Проверяем, что после SELECT идет FROM
-        throw runtime_error("Wrong syntax"); // Если нет, выбрасываем исключение
-    }
 
-    List<string> from_tables; // Список таблиц, из которых берутся данные
-    get_tables(line, i, from_tables); // Получаем список таблиц
-
-    // Проверяем синтаксис выбранных таблиц
-    if (!check_synt(selected_tables, from_tables)) {
-        throw runtime_error("Wrong syntax"); // Если синтаксис неверен, выбрасываем исключение
-    }
-
-    HashTable<List<string>> rasp; // Хеш-таблица для хранения выбранных колонок для каждой таблицы
-
-    // Заполняем хеш-таблицу
-    for (int z = 0; z < from_tables.length; z++) {
-        List<string> forRasp; // Список для хранения колонок текущей таблицы
-        for (int j = 0; j < selected_tables.length; j++) {
-            // Если выбранная таблица совпадает с текущей
-            if (selected_tables[j] == from_tables[z]) {
-                // Проверяем, что колонка еще не была добавлена
-                if (forRasp.find(selected_columns[j]) != -1) {
-                    throw runtime_error("Wrong syntax"); // Если колонка уже есть, выбрасываем исключение
-                }
-                forRasp.push(selected_columns[j]); // Добавляем колонку в список
-            }
-        }
-        rasp.Add(from_tables[z], forRasp); // Добавляем список колонок в хеш-таблицу
-    }
-
-    List<List<string>> new_formed; // Список для хранения сформированных данных
-    List<string> posl; // Список для хранения имен колонок
-
-    // Формируем данные из выбранных таблиц
-    form(schem_name, from_tables, rasp, posl, new_formed, tables);
-
-    com = take_string(line, i); // Получаем следующее слово
-    string logOperator = "AND"; // Логический оператор по умолчанию
-
-    List<bool> cmp; // Список для хранения результатов условий
-    for (int j = 0; j < new_formed.length; j++) {
-        cmp.push(true); // Изначально все строки считаем подходящими
-    }
-
-    // Проверяем, есть ли условия WHERE
-    if (com == "WHERE") {
-        where_select(line, i, logOperator, posl, new_formed, cmp); // Обрабатываем условия
-    }
-
-    printFilteredRows(new_formed, cmp); // Печатаем отфильтрованные строки
-    
-    // Очищаем временные данные
-    selected_tables.clear();
-    selected_columns.clear();
-
-    // Очищаем данные в хеш-таблице для отработанных таблиц
-    for (int h = 0; h < from_tables.length; h++) {
-        rasp.Get(from_tables[h]).clear();
-    }
-
-    from_tables.clear(); // Очищаем список таблиц
-    posl.clear(); // Очищаем список колонок
-    double_clear(new_formed); // Очищаем сформированные данные
+// Функция для выполнения SQL-подобного запроса SELECT 
+string select(string& line, int& i, string& schem_name, HashTable<List<string>>& tables) { 
+    filesystem::path dirPath = "."; // Путь к директории 
+    List<string> selected_tables; // Список выбранных таблиц 
+    List<string> selected_columns; // Список выбранных колонок 
+ 
+    // Получаем имена таблиц и колонок из запроса 
+    get_names(line, i, selected_tables, selected_columns); 
+     
+    string com = take_string(line, i); // Получаем следующее слово 
+    if (com != "FROM") { // Проверяем, что после SELECT идет FROM 
+        throw runtime_error("Wrong syntax"); // Если нет, выбрасываем исключение 
+    } 
+ 
+    List<string> from_tables; // Список таблиц, из которых берутся данные 
+    get_tables(line, i, from_tables); // Получаем список таблиц 
+ 
+    // Проверяем синтаксис выбранных таблиц 
+    if (!check_synt(selected_tables, from_tables)) { 
+        throw runtime_error("Wrong syntax"); // Если синтаксис неверен, выбрасываем исключение 
+    } 
+ 
+    HashTable<List<string>> rasp; // Хеш-таблица для хранения выбранных колонок для каждой таблицы 
+ 
+    // Заполняем хеш-таблицу 
+    for (int z = 0; z < from_tables.length; z++) { 
+        List<string> forRasp; // Список для хранения колонок текущей таблицы 
+        for (int j = 0; j < selected_tables.length; j++) { 
+            // Если выбранная таблица совпадает с текущей 
+            if (selected_tables[j] == from_tables[z]) { 
+                // Проверяем, что колонка еще не была добавлена 
+                if (forRasp.find(selected_columns[j]) != -1) { 
+                    throw runtime_error("Wrong syntax"); // Если колонка уже есть, выбрасываем исключение 
+                } 
+                forRasp.push(selected_columns[j]); // Добавляем колонку в список 
+            } 
+        } 
+        rasp.Add(from_tables[z], forRasp); // Добавляем список колонок в хеш-таблицу 
+    } 
+ 
+    List<List<string>> new_formed; // Список для хранения сформированных данных 
+    List<string> posl; // Список для хранения имен колонок 
+ 
+    // Формируем данные из выбранных таблиц 
+    form(schem_name, from_tables, rasp, posl, new_formed, tables); 
+ 
+    com = take_string(line, i); // Получаем следующее слово 
+    string logOperator = "AND"; // Логический оператор по умолчанию 
+ 
+    List<bool> cmp; // Список для хранения результатов условий 
+    for (int j = 0; j < new_formed.length; j++) { 
+        cmp.push(true); // Изначально все строки считаем подходящими 
+    } 
+ 
+    // Проверяем, есть ли условия WHERE 
+    if (com == "WHERE") { 
+        where_select(line, i, logOperator, posl, new_formed, cmp); // Обрабатываем условия 
+    } 
+ 
+    // Формируем результат в виде строки 
+    string result; 
+    for (int j = 0; j < new_formed.length; j++) { 
+        if (cmp[j]) { // Если строка подходит по условиям 
+            for (int k = 0; k < new_formed[j].length; k++) { 
+                result += new_formed[j][k]; // Добавляем значения колонок 
+                if (k < new_formed[j].length - 1) { 
+                    result += ", "; // Добавляем запятую между значениями 
+                } 
+            } 
+            result += "\n"; // Переход на новую строку после каждой записи 
+        } 
+    } 
+ 
+    // Очищаем временные данные 
+    selected_tables.clear(); 
+    selected_columns.clear(); 
+ 
+    // Очищаем данные в хеш-таблице для отработанных таблиц 
+    for (int h = 0; h < from_tables.length; h++) { 
+        rasp.Get(from_tables[h]).clear(); 
+    } 
+ 
+    from_tables.clear(); // Очищаем список таблиц 
+    posl.clear(); // Очищаем список колонок 
+    double_clear(new_formed); // Очищаем сформированные данные 
+ 
+    return result; // Возвращаем результат 
 }
 
 // Функция для получения содержимого списка из строки
@@ -568,6 +583,8 @@ void insert(string& line, int& i, HashTable<List<string>>& tables, string& schem
 
     values.clear(); // Очищаем список значений
 }
+
+
 // Функция для удаления строк из таблицы
 void deleting(string& line, int& i, HashTable<List<string>>& tables, string& schem_name) {
     filesystem::path dirPath = "."; // Путь к директории
