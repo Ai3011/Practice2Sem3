@@ -3,10 +3,10 @@
 #include <mutex> 
 #include <memory> 
 #include <netinet/in.h> // Для работы с сокетами 
-#include <unistd.h> // Для close() 
-#include <cstring> // Для memset 
+#include <unistd.h>     // Для close() 
+#include <cstring>      // Для memset 
 #include <stdexcept> 
-#include "Commands.h" // Подключение вашей реализации команд 
+#include "Commands.h"   // Подключение вашей реализации команд 
  
 using namespace std; 
  
@@ -47,9 +47,9 @@ void console_parse(string& schem_name, HashTable<List<string>>& tables, List<str
         } else { 
             throw runtime_error("Unknown command"); 
         } 
-
-        this_thread::sleep_for(chrono::seconds(5));
-
+ 
+        this_thread::sleep_for(chrono::seconds(5)); // Задержка для имитации выполнения 
+ 
     } catch (const runtime_error& err) { 
         response = "Error: " + string(err.what()); 
     } 
@@ -62,16 +62,22 @@ void handle_client(int client_socket, string& schem_name,
     char buffer[1024] = {0}; 
     bool running = true;  // состояние для продолжения работы 
  
+    // Логирование подключения клиента 
+    cout << "Client connected (Socket: " << client_socket << ")" << endl; 
+ 
     while (running) {  // Ожидаем следующую команду 
         // Получаем данные от клиента 
         int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0); 
         if (bytes_received <= 0) { 
-            cerr << "Error receiving data or client disconnected" << endl; 
+            cerr << "Error receiving data or client disconnected (Socket: " << client_socket << ")" << endl; 
             break;  // Завершаем цикл, если ошибка получения или клиент отключился 
         } 
         buffer[bytes_received] = '\0'; // Завершаем строку 
         string command(buffer); 
         string response; 
+ 
+        // Логируем полученную команду 
+        cout << "Received command from client (Socket: " << client_socket << "): " << command << endl; 
  
         // Проверка состояния мьютекса 
         if (!db_mutex.try_lock()) { 
@@ -82,7 +88,15 @@ void handle_client(int client_socket, string& schem_name,
  
         try { 
             console_parse(schem_name, *tables, *tables_names, limit, command, response); // Обрабатываем команду 
-             
+ 
+            // Логируем результат выполнения команды 
+            if (response.find("command executed") != string::npos) { 
+                cout << "Command executed successfully (Socket: " << client_socket << "): " << command << endl; 
+            } else { 
+                cout << "Command execution failed (Socket: " << client_socket << "): " <<
+response << endl; 
+            } 
+ 
             if (command == "EXIT") {  // Проверка на команду выхода 
                 response = "Exiting..."; 
                 send(client_socket, response.c_str(), response.size(), 0); 
@@ -93,10 +107,14 @@ void handle_client(int client_socket, string& schem_name,
         } catch (const std::exception& e) { 
             response = "Error: " + string(e.what()); 
             send(client_socket, response.c_str(), response.size(), 0); 
+            cout << "Command execution failed (Socket: " << client_socket << "): " << response << endl; 
         } 
  
         db_mutex.unlock(); // Освобождаем мьютекс после обработки команды 
     } 
+ 
+    // Логирование отключения клиента 
+    cout << "Client disconnected (Socket: " << client_socket << ")" << endl; 
  
     close(client_socket);  // Закрываем соединение после выхода из цикла 
 } 
@@ -141,6 +159,8 @@ int main() {
             cerr << "Accept failed" << endl; 
             continue; 
         } 
+ 
+        cout << "New client accepted (Socket: " << client_socket << ")" << endl; 
  
         thread t(handle_client, client_socket, ref(schem_name), tables, tables_names, limit); 
         t.detach();  // Запускаем поток и продолжаем принимать новых клиентов 
