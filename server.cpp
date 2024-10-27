@@ -52,34 +52,43 @@ void console_parse(string& schem_name, HashTable<List<string>>& tables, List<str
     } 
 }
  
-// Функция для обработки запросов клиента 
-void handle_client(int client_socket, string& schem_name,    
-                   shared_ptr<HashTable<List<string>>> tables,    
-                   shared_ptr<List<string>> tables_names, int limit) {   
-    char buffer[1024] = {0};   
-  
-    // Получаем данные от клиента   
-    int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);   
-    if (bytes_received < 0) {   
-        cerr << "Error receiving data" << endl;   
-        close(client_socket);   
-        return;   
-    }   
-    buffer[bytes_received] = '\0'; // Завершаем строку   
-    string command(buffer);   
-    string response; 
-  
-    try {  
-        std::lock_guard<std::mutex> lock(db_mutex); // Защищаем работу с БД  
-        console_parse(schem_name, *tables, *tables_names, limit, command, response); // Обрабатываем команду  
-        send(client_socket, response.c_str(), response.size(), 0); // Отправляем результат клиенту 
-    } catch (const std::exception& e) {  
-        response = "Error: " + string(e.what());  
-        send(client_socket, response.c_str(), response.size(), 0);  
-    } 
-  
-    close(client_socket);   
-}  
+void handle_client(int client_socket, string& schem_name,     
+                   shared_ptr<HashTable<List<string>>> tables,     
+                   shared_ptr<List<string>> tables_names, int limit) {    
+    char buffer[1024] = {0};    
+    bool running = true;  // состояние для продолжения работы 
+   
+    while (running) {  // Ожидаем следующую команду 
+        // Получаем данные от клиента    
+        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);    
+        if (bytes_received <= 0) {    
+            cerr << "Error receiving data or client disconnected" << endl;    
+            break;  // Завершаем цикл, если ошибка получения или клиент отключился   
+        }    
+        buffer[bytes_received] = '\0'; // Завершаем строку    
+        string command(buffer);    
+        string response;  
+   
+        try {   
+            std::lock_guard<std::mutex> lock(db_mutex); // Защищаем работу с БД   
+            console_parse(schem_name, *tables, *tables_names, limit, command, response); // Обрабатываем команду   
+             
+            if (command == "EXIT") {  // Проверка на команду выхода 
+                response = "Exiting..."; 
+                send(client_socket, response.c_str(), response.size(), 0); 
+                running = false;  // Завершаем цикл, если команда EXIT   
+            } else { 
+                send(client_socket, response.c_str(), response.size(), 0); // Отправляем результат клиенту 
+            } 
+             
+        } catch (const std::exception& e) {   
+            response = "Error: " + string(e.what());   
+            send(client_socket, response.c_str(), response.size(), 0);   
+        }  
+    }  
+   
+    close(client_socket);  // Закрываем соединение после выхода из цикла 
+}
   
 int main() {   
     auto tables = make_shared<HashTable<List<string>>>();   
