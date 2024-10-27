@@ -4,10 +4,9 @@
 #include <memory> 
 #include <netinet/in.h> // Для работы с сокетами 
 #include <unistd.h>     // Для close() 
-#include <cstring>      // Для memset 
-#include <stdexcept> 
-#include "Commands.h"   // Подключение вашей реализации команд 
- 
+#include <cstring>     
+#include <stdexcept>  // исключения
+#include "Commands.h"    
 using namespace std; 
  
 mutex db_mutex; // Мьютекс для синхронизации доступа к БД 
@@ -55,9 +54,7 @@ void console_parse(string& schem_name, HashTable<List<string>>& tables, List<str
 } 
  
 // Функция для обработки запросов клиента 
-void handle_client(int client_socket, string& schem_name, 
-                   shared_ptr<HashTable<List<string>>> tables, 
-                   shared_ptr<List<string>> tables_names, int limit) { 
+void handle_client(int client_socket, string& schem_name, shared_ptr<HashTable<List<string>>> tables, shared_ptr<List<string>> tables_names, int limit) { 
     char buffer[1024] = {0}; 
     bool running = true;  // состояние для продолжения работы 
  
